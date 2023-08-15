@@ -3,6 +3,7 @@
 
 import logging
 import os
+from Protein import *
 
 
 def razor(list_of_proteins, working_dir, transmem_doms_limit, min_loop_length) -> list:
@@ -14,19 +15,30 @@ def razor(list_of_proteins, working_dir, transmem_doms_limit, min_loop_length) -
 
 
     for protein in list_of_proteins:
-        if protein.transmembrane_doms >= transmem_doms_limit:
-            longest_loop = max(protein.provide_raw_loops(), key=lambda k: len(k), default=None)
-            if longest_loop and len(longest_loop) > min_loop_length:
-                logging.debug(f'Substituting {str(protein.id)} sequence with its longest loop')
-                protein.original_sequence_if_razor = protein.sequence
-                protein.sequence = longest_loop
-                protein.razored = True
-            else:
-                logging.debug(f"No replacement found for {str(protein.id)}")
-                protein.razored = False
-        else:
-            protein.razored = False
+        new_loop = []
+        if transmem_doms_limit:
+            if protein.transmembrane_doms > transmem_doms_limit:
+            
+                new_loop = max(protein.provide_raw_loops_std(), key = lambda k: len(k))
+        
+            if protein.transmembrane_doms > 0:
+                new_loop_out = protein.provide_raw_loops(transmem_doms_limit)
+            
+                protein.sequence_out = new_loop_out
+            
+                if len(new_loop) > min_loop_length:
+                    logging.debug(f'Substituting {str(protein.id)} sequence with its outer loops')
+                    protein.original_sequence_if_razor = protein.sequence
+                    protein.sequence = new_loop
+                    protein.razored = True
+                else:
+                    logging.debug(f"No replacement found for {str(protein.id)}")
+                    protein.razored = False
+        
     return list_of_proteins
+
+#old version utilized in bNERVE.
+
 '''
     # logging.debug("Warning: razor utilizes X as an exclusive symbol to split the final protein. Check if X is used inside the protein sequences")
     for p in list_of_proteins:

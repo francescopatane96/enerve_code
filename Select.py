@@ -4,7 +4,7 @@
 import pandas as pd
 from Protein import *
 
-def select(list_of_proteins, autoimmunity, transmem_doms_limit, padlimit, mouse, mouse_peptides_sum_limit, antigenlimit, antigen, annotation) -> list:
+def select(list_of_proteins, autoimmunity, transmem_doms_limit, padlimit, mouse, antigenlimit, antigen, annotation, razor) -> list:
     """ Selection of suitable vaccine candidate proteins """
     # protein annotations to exclude
     annotations2exclude = ['structural constituent of ribosome', 'DNA binding',
@@ -27,12 +27,14 @@ def select(list_of_proteins, autoimmunity, transmem_doms_limit, padlimit, mouse,
             if p.localization == 'in' and p.p_antigen < antigenlimit and p.p_ad < padlimit: continue
         if antigen != "True":
             if p.localization == 'in' and p.p_ad < padlimit: continue
-        #if (p.transmembrane_doms >= transmem_doms_limit) and (p.original_sequence_if_razor is None): continue
+        if razor == 'False':
+            if (p.transmembrane_doms >= transmem_doms_limit) and (p.original_sequence_if_razor is None): continue
+        
         if autoimmunity == "True":
             if p.sapiens_peptides_sum > .15: continue
             if len(p.list_of_peptides_from_comparison_with_mhcpep_sapiens) >= 1: continue
             if mouse == "True":
-                if p.mouse_peptides_sum > mouse_peptides_sum_limit: continue
+                if p.mouse_peptides_sum > .15: continue
                 if len(p.list_of_peptides_from_comparison_with_mhcpep_mouse) >= 1: continue
 
         annotation_flag = "False"
@@ -45,7 +47,7 @@ def select(list_of_proteins, autoimmunity, transmem_doms_limit, padlimit, mouse,
         final_list.append(p)
     return final_list
 
-def scorer(protein: Protein, mouse_peptides_sum_limit: float, mouse: str, autoimmunity: str, antigen: str) -> float:
+def scorer(protein: Protein, mouse: str, autoimmunity: str, antigen: str) -> float:
     """Provides a score for candidate proteins"""
 
     if mouse == "True" and autoimmunity == "True" and antigen == "True":
@@ -54,7 +56,7 @@ def scorer(protein: Protein, mouse_peptides_sum_limit: float, mouse: str, autoim
                     (1 - len(protein.list_of_peptides_from_comparison_with_mhcpep_sapiens)) + \
                     (1 - (protein.sapiens_peptides_sum / .15)) + \
                     (1 - len(protein.list_of_peptides_from_comparison_with_mhcpep_mouse)) + \
-                    (1 - (protein.mouse_peptides_sum / mouse_peptides_sum_limit))) / 7
+                    (1 - (protein.mouse_peptides_sum / .15))) / 7
     if mouse != "True" and autoimmunity == "True" and antigen == "True":
         score = (protein.p_ad + protein.p_antigen + \
                     ((protein.reliability_out)) + \
@@ -68,17 +70,17 @@ def scorer(protein: Protein, mouse_peptides_sum_limit: float, mouse: str, autoim
                  (1 - len(protein.list_of_peptides_from_comparison_with_mhcpep_sapiens)) + \
                  (1 - (protein.sapiens_peptides_sum / .15)) + \
                  (1 - len(protein.list_of_peptides_from_comparison_with_mhcpep_mouse)) + \
-                 (1 - (protein.mouse_peptides_sum / mouse_peptides_sum_limit))) / 6
+                 (1 - (protein.mouse_peptides_sum / .15))) / 6
     if mouse != "True" and autoimmunity != "True" and antigen != "True":
         score = (protein.p_ad + protein.reliability_out) / 2
 
     return score
 
-def output(list_of_proteins: list, outfile, mouse_peptides_sum_limit: float, mouse: str, autoimmunity: str, antigen: str):
+def output(list_of_proteins: list, outfile, mouse: str, autoimmunity: str, antigen: str):
     """Produces output .csv table"""
     df = pd.DataFrame([[str(protein.id),
                         str("".join([str(protein.accession) if protein.accession != None else ""])),
-                        (round(scorer(protein, mouse_peptides_sum_limit, mouse, autoimmunity, antigen), 4)),
+                        (round(scorer(protein, mouse, autoimmunity, antigen), 4)),
                         str(protein.length),
                         str(protein.transmembrane_doms),
                         str(protein.localization),
@@ -104,10 +106,15 @@ def output(list_of_proteins: list, outfile, mouse_peptides_sum_limit: float, mou
                         str(", ".join(list(set(protein.list_of_peptides_from_comparison_with_mhcpep_mouse)))),
                         str(protein.sequence),
                         str("".join([str(protein.original_sequence_if_razor) if protein.original_sequence_if_razor != None else ""])),
+                        str("".join([str(protein.sequence_out) if protein.sequence_out != None else ""])),
                         str("".join([str(protein.tmhmm_seq) if "M" in str(protein.tmhmm_seq) else ""])),
-                        str(", ".join([str(protein.mhci_epitopes) if len(protein.mhci_epitopes) != 0 else ""])),
-                        str(", ".join([str(protein.mhcii_epitopes) if len(protein.mhcii_epitopes) != 0 else ""]))
-                        # should be shown anyways
+                        str("".join([str(protein.MHC1_binders) if str(protein.MHC1_binders) != None else ''])),
+                        str("".join([str(protein.MHC2_binders) if str(protein.MHC2_binders) != None else ''])),
+                        str("".join([str(protein.MHC1_pb_binders) if str(protein.MHC1_pb_binders) != None else ''])),
+                        str("".join([str(protein.MHC2_pb_binders) if str(protein.MHC2_pb_binders) != None else ''])),
+                        str("".join([str(protein.instability_index) if str(protein.instability_index) != None else ''])),
+                        str("".join([str(protein.charge_at_pH_7) if str(protein.charge_at_pH_7) != None else '']))
+                       
                         ] for protein in list_of_proteins
                         ],
                         columns=['id',
@@ -130,9 +137,14 @@ def output(list_of_proteins: list, outfile, mouse_peptides_sum_limit: float, mou
                                 'list_of_peptides_from_comparison_with_mhcpep_mouse',
                                 'sequence',
                                 'original_sequence_if_razor',
+                                'sequence_out',
                                 'tmhmm_seq',
-                                'mhci_epitopes',
-                                'mhcii_epitopes'
+                                'MHC1_binders',
+                                'MHC2_binders',
+                                'MHC1_pb_binders',
+                                'MHC2_pb_binders',
+                                'Instability_index',
+                                'Charge_at_pH7'
                                 ]
                         )
     df = df.sort_values(by='score', ascending=False)
